@@ -52,25 +52,19 @@ app.get('/auth/callback', async (req, res) => {
   if (state !== req.session.oauthState) return res.status(400).send('CSRF detected.');
 
   try {
-    // 🔍 DEBUG LOG: See exactly what's going into the token exchange
-    console.log('🔐 Sending token exchange:', {
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: process.env.FRAMEIO_REDIRECT_URI,
-      client_id: process.env.FRAMEIO_CLIENT_ID,
-      client_secret: process.env.FRAMEIO_CLIENT_SECRET ? '✔︎ provided' : '❌ MISSING'
-    });
+    const params = new URLSearchParams();
+    params.append('grant_type', 'authorization_code');
+    params.append('code', code);
+    params.append('redirect_uri', process.env.FRAMEIO_REDIRECT_URI);
+    params.append('client_id', process.env.FRAMEIO_CLIENT_ID);
+    params.append('client_secret', process.env.FRAMEIO_CLIENT_SECRET);
 
     const tokenRes = await fetch('https://applications.frame.io/oauth2/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: process.env.FRAMEIO_REDIRECT_URI,
-        client_id: process.env.FRAMEIO_CLIENT_ID,
-        client_secret: process.env.FRAMEIO_CLIENT_SECRET,
-      }),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
     });
 
     const token = await tokenRes.json();
@@ -90,6 +84,7 @@ app.get('/auth/callback', async (req, res) => {
     res.status(500).send('OAuth server error.');
   }
 });
+
 
 
 // ✅ SUPPORT alternate callback path from Frame.io
