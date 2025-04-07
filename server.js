@@ -52,16 +52,19 @@ app.get('/auth/callback', async (req, res) => {
   if (state !== req.session.oauthState) return res.status(400).send('CSRF detected.');
 
   try {
+    const basicAuth = Buffer
+      .from(`${process.env.FRAMEIO_CLIENT_ID}:${process.env.FRAMEIO_CLIENT_SECRET}`)
+      .toString('base64');
+
     const params = new URLSearchParams();
     params.append('grant_type', 'authorization_code');
     params.append('code', code);
     params.append('redirect_uri', process.env.FRAMEIO_REDIRECT_URI);
-    params.append('client_id', process.env.FRAMEIO_CLIENT_ID);
-    params.append('client_secret', process.env.FRAMEIO_CLIENT_SECRET);
 
     const tokenRes = await fetch('https://applications.frame.io/oauth2/token', {
       method: 'POST',
       headers: {
+        'Authorization': `Basic ${basicAuth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: params.toString(),
@@ -84,6 +87,7 @@ app.get('/auth/callback', async (req, res) => {
     res.status(500).send('OAuth server error.');
   }
 });
+
 
 
 
