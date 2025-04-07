@@ -1,0 +1,89 @@
+const express = require('express');
+const path = require('path');
+const session = require('express-session');
+const fetch = (...args) => import('node-fetch').then(mod => mod.default(...args));
+require('dotenv').config();
+
+const app = express();
+
+// ✅ Serve manifest first
+app.get('/manifest.json', (req, res) => {
+  const filePath = path.join(__dirname, 'dist/manifest.json');
+  console.log('📦 Trying to serve:', filePath);
+  res.sendFile(filePath);
+});
+
+// ✅ Serve static files
+app.use(express.static(path.join(__dirname, 'dist')));
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'dev-secret',
+  resave: false,
+  saveUninitialized: true,
+}));
+
+// 🔐 OAuth: Start login
+app.get('/auth/frameio', (req, res) => {
+  console.log('🔥 /auth/frameio hit');
+
+  const state = Math.random().toString(36).substring(2);
+  req.session.oauthState = state;
+
+  const authUrl = `https://applications.frame.io/oauth2/auth` +
+    `?response_type=code&client_id=${process.env.FRAMEIO_CLIENT_ID}` +
+    `&redirect_uri=${encodeURIComponent(process.env.FRAMEIO_REDIRECT_URI)}` +
+    `&scope=${encodeURIComponent('asset.read asset.create asset.delete reviewlink.create offline')}` +
+    `&state=${state}`;
+
+  res.redirect(authUrl);
+});
+
+// 🔐 OAuth: Callback
+app.get('/auth/callback', async (req, res) => {
+  const { code, state } = req.query;
+  if (state !== req.session.oauthState) return res.status(400).send('CSRF detected.');
+
+  const tokenRes = await fetch('https://applications.frame.io/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: process.env.FRAMEIO_REDIRECT_URI,
+      client_id: process.env.FRAMEIO_CLIENT_ID,
+      client_secret: process.env.FRAMEIO_CLIENT_SECRET,
+    })
+  });
+
+  const token = await tokenRes.json();
+
+  if (token.access_token) {
+    req.session.frameioToken = token;
+    res.send(`<script>
+      window.opener.postMessage('frameio-auth-success', '*');
+      window.close();
+    </script>`);
+  } else {
+    res.status(500).send('OAuth failed.');
+  }
+});
+
+// 📦 API: List Frame.io assets
+app.get('/api/assets', async (req, res) => {
+  const token = req.session.frameioToken?.access_token;
+  const projectId = process.env.FRAMEIO_PROJECT_ID;
+
+  if (!token) return res.status(401).send('Not authenticated');
+
+  const response = await fetch(`https://api.frame.io/v2/projects/${projectId}/items`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const assets = await response.json();
+  res.json(assets);
+});
+
+// 🚀 Start server
+app.listen(5241, () => {
+  console.log('✅ Add-on panel running at http://localhost:5241');
+});
