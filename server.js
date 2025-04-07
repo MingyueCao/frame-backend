@@ -51,29 +51,41 @@ app.get('/auth/callback', async (req, res) => {
   const { code, state } = req.query;
   if (state !== req.session.oauthState) return res.status(400).send('CSRF detected.');
 
-  const tokenRes = await fetch('https://applications.frame.io/oauth2/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: process.env.FRAMEIO_REDIRECT_URI,
-      client_id: process.env.FRAMEIO_CLIENT_ID,
-      client_secret: process.env.FRAMEIO_CLIENT_SECRET,
-    })
-  });
+  try {
+    const tokenRes = await fetch('https://applications.frame.io/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: process.env.FRAMEIO_REDIRECT_URI,
+        client_id: process.env.FRAMEIO_CLIENT_ID,
+        client_secret: process.env.FRAMEIO_CLIENT_SECRET,
+      })
+    });
 
-  const token = await tokenRes.json();
+    const token = await tokenRes.json();
 
-  if (token.access_token) {
-    req.session.frameioToken = token;
-    res.send(`<script>
-      window.opener.postMessage('frameio-auth-success', '*');
-      window.close();
-    </script>`);
-  } else {
-    res.status(500).send('OAuth failed.');
+    if (token.access_token) {
+      req.session.frameioToken = token;
+      res.send(`<script>
+        window.opener.postMessage('frameio-auth-success', '*');
+        window.close();
+      </script>`);
+    } else {
+      console.error('❌ Token exchange failed:', token);
+      res.status(500).send('OAuth failed.');
+    }
+  } catch (err) {
+    console.error('❌ Error during callback:', err);
+    res.status(500).send('OAuth server error.');
   }
+});
+
+// ✅ SUPPORT alternate callback path from Frame.io
+app.get('/oauth/callback', (req, res) => {
+  req.url = '/auth/callback';
+  app._router.handle(req, res);
 });
 
 // 📦 API: List Frame.io assets
