@@ -1,7 +1,6 @@
 const express = require('express');
 const path = require('path');
 const session = require('express-session');
-const fetch = (...args) => import('node-fetch').then(mod => mod.default(...args));
 require('dotenv').config();
 
 const app = express();
@@ -61,7 +60,7 @@ app.get('/auth/callback', async (req, res) => {
         redirect_uri: process.env.FRAMEIO_REDIRECT_URI,
         client_id: process.env.FRAMEIO_CLIENT_ID,
         client_secret: process.env.FRAMEIO_CLIENT_SECRET,
-      })
+      }),
     });
 
     const token = await tokenRes.json();
@@ -95,12 +94,17 @@ app.get('/api/assets', async (req, res) => {
 
   if (!token) return res.status(401).send('Not authenticated');
 
-  const response = await fetch(`https://api.frame.io/v2/projects/${projectId}/items`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  try {
+    const response = await fetch(`https://api.frame.io/v2/projects/${projectId}/items`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-  const assets = await response.json();
-  res.json(assets);
+    const assets = await response.json();
+    res.json(assets);
+  } catch (err) {
+    console.error('❌ Error fetching assets:', err);
+    res.status(500).send('Failed to fetch assets');
+  }
 });
 
 // 🚀 Start server
