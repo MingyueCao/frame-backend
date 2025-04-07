@@ -6,21 +6,29 @@ require('dotenv').config();
 
 const app = express();
 
-// ✅ Serve manifest first
-app.get('/manifest.json', (req, res) => {
-  const filePath = path.join(__dirname, 'dist/manifest.json');
-  console.log('📦 Trying to serve:', filePath);
-  res.sendFile(filePath);
-});
-
-// ✅ Serve static files
-app.use(express.static(path.join(__dirname, 'dist')));
-
+// 🧠 Basic Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-secret',
   resave: false,
   saveUninitialized: true,
 }));
+
+// 🔍 Serve manifest.json FIRST — with error logging
+app.get('/manifest.json', (req, res) => {
+  const filePath = path.join(__dirname, 'dist/manifest.json');
+  console.log('📦 Trying to serve:', filePath);
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      console.error('❌ Error sending manifest:', err);
+      res.status(err.statusCode || 500).end();
+    }
+  });
+});
+
+// 🌐 Serve other static frontend files (index.html, etc)
+app.use(express.static(path.join(__dirname, 'dist')));
 
 // 🔐 OAuth: Start login
 app.get('/auth/frameio', (req, res) => {
