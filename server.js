@@ -7,16 +7,16 @@ require('dotenv').config();
 
 const app = express();
 
-// 🕵️ Log incoming origin
+// 🕵️ Log incoming origin for debugging
 app.use((req, res, next) => {
   console.log('🌍 Origin:', req.headers.origin);
   next();
 });
 
-// 🔓 Enable CORS for Adobe Express
+// 🔓 Enable dynamic CORS
 const allowedOrigins = [
   'https://new.express.adobe.com',
-  'https://your-addon-id.wxp.adobe-addons.com' // Replace this!
+  'https://your-addon-id.wxp.adobe-addons.com'  // TODO: replace with your actual one!
 ];
 
 app.use(cors({
@@ -30,7 +30,7 @@ app.use(cors({
   credentials: true,
 }));
 
-// 🧠 Middleware
+// 🧠 Basic Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
@@ -38,33 +38,34 @@ app.use(session({
   resave: false,
   saveUninitialized: true,
   cookie: {
-    sameSite: 'none',
-    secure: true
+    sameSite: 'none',   // Allow cross-site cookies in iframes
+    secure: true        // Required for SameSite=None to work
   }
 }));
 
-// 📦 Serve manifest.json
+// 🔍 Serve manifest.json FIRST — with error logging
 app.get('/manifest.json', (req, res) => {
   const filePath = path.join(__dirname, 'dist/manifest.json');
+  console.log('📦 Trying to serve:', filePath);
   res.sendFile(filePath, (err) => {
     if (err) {
-      console.error('❌ Manifest error:', err);
+      console.error('❌ Error sending manifest:', err);
       res.status(err.statusCode || 500).end();
     }
   });
 });
 
-// 🌐 Static frontend
+// 🌐 Serve other static frontend files (index.html, etc)
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// 🔐 OAuth login redirect
+// 🔐 OAuth: Start login
 app.get('/auth/frameio', (req, res) => {
+  console.log('🔥 /auth/frameio hit');
   const state = Math.random().toString(36).substring(2);
   req.session.oauthState = state;
 
   const authUrl = `https://applications.frame.io/oauth2/auth` +
-    `?response_type=code` +
-    `&client_id=${process.env.FRAMEIO_CLIENT_ID}` +
+    `?response_type=code&client_id=${process.env.FRAMEIO_CLIENT_ID}` +
     `&redirect_uri=${encodeURIComponent(process.env.FRAMEIO_REDIRECT_URI)}` +
     `&scope=${encodeURIComponent('asset.read asset.create asset.delete reviewlink.create offline')}` +
     `&state=${state}`;
@@ -72,15 +73,15 @@ app.get('/auth/frameio', (req, res) => {
   res.redirect(authUrl);
 });
 
-// 🔐 OAuth callback
+// 🔐 OAuth: Callback
 app.get('/auth/callback', async (req, res) => {
   const { code, state } = req.query;
   if (state !== req.session.oauthState) return res.status(400).send('CSRF detected.');
 
   try {
-    const basicAuth = Buffer.from(
-      `${process.env.FRAMEIO_CLIENT_ID}:${process.env.FRAMEIO_CLIENT_SECRET}`
-    ).toString('base64');
+    const basicAuth = Buffer
+      .from(`${process.env.FRAMEIO_CLIENT_ID}:${process.env.FRAMEIO_CLIENT_SECRET}`)
+      .toString('base64');
 
     const params = new URLSearchParams();
     params.append('grant_type', 'authorization_code');
@@ -100,19 +101,27 @@ app.get('/auth/callback', async (req, res) => {
 
     if (token.access_token) {
       req.session.frameioToken = token;
-      // Redirect to frontend with success marker
-      res.redirect('/?auth=success');
+      res.send(`<script>
+        window.opener.postMessage('frameio-auth-success', '*');
+        window.close();
+      </script>`);
     } else {
       console.error('❌ Token exchange failed:', token);
-      res.redirect('/?auth=error');
+      res.status(500).send('OAuth failed.');
     }
   } catch (err) {
-    console.error('❌ Callback error:', err);
-    res.redirect('/?auth=error');
+    console.error('❌ Error during callback:', err);
+    res.status(500).send('OAuth server error.');
   }
 });
 
-// 📦 Get assets
+// ✅ SUPPORT alternate callback path from Frame.io
+app.get('/oauth/callback', (req, res) => {
+  req.url = '/auth/callback';
+  app._router.handle(req, res);
+});
+
+// 📦 API: List Frame.io assets
 app.get('/api/assets', async (req, res) => {
   const token = req.session.frameioToken?.access_token;
   const projectId = process.env.FRAMEIO_PROJECT_ID;
@@ -134,5 +143,5 @@ app.get('/api/assets', async (req, res) => {
 
 // 🚀 Start server
 app.listen(5241, () => {
-  console.log('✅ Backend live at http://localhost:5241');
+  console.log('✅ Add-on panel running at http://localhost:5241');
 });
