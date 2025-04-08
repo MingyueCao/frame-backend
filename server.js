@@ -16,7 +16,7 @@ app.use((req, res, next) => {
 // 🔓 Enable dynamic CORS
 const allowedOrigins = [
   'https://new.express.adobe.com',
-  'https://your-addon-id.wxp.adobe-addons.com'  // TODO: replace with your actual one!
+  'https://wi20ln01l.wxp.adobe-addons.com'  // TODO: replace with your actual one!
 ];
 
 app.use(cors({
