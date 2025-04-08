@@ -80,12 +80,16 @@ app.get('/auth/frameio', (req, res) => {
 });
 
 // 🔐 OAuth callback
+
 app.get('/auth/callback', async (req, res) => {
   const { code, state } = req.query;
-  const codeVerifier = req.session.codeVerifier;
 
-  if (state !== req.session.oauthState) {
-    return res.status(400).send('CSRF detected.');
+  if (state !== req.session.oauthState) return res.status(400).send('CSRF detected.');
+
+  const codeVerifier = req.session.codeVerifier; // ← PKCE magic
+
+  if (!codeVerifier) {
+    return res.status(400).send('Missing code_verifier');
   }
 
   try {
@@ -94,14 +98,12 @@ app.get('/auth/callback', async (req, res) => {
     params.append('code', code);
     params.append('redirect_uri', process.env.FRAMEIO_REDIRECT_URI);
     params.append('client_id', process.env.FRAMEIO_CLIENT_ID);
-    params.append('code_verifier', req.session.codeVerifier);
+    params.append('code_verifier', codeVerifier);
 
     const tokenRes = await fetch('https://applications.frame.io/oauth2/token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: params.toString()
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
     });
 
     const token = await tokenRes.json();
@@ -109,7 +111,7 @@ app.get('/auth/callback', async (req, res) => {
     if (token.access_token) {
       req.session.frameioToken = token;
       res.send(`<script>
-        window.opener?.postMessage('frameio-auth-success', '*');
+        window.opener.postMessage('frameio-auth-success', '*');
         window.close();
       </script>`);
     } else {
@@ -121,6 +123,7 @@ app.get('/auth/callback', async (req, res) => {
     res.status(500).send('OAuth server error.');
   }
 });
+
 
 // ✅ Fallback route for /oauth/callback
 app.get('/oauth/callback', (req, res) => {
