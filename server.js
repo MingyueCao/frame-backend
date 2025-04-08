@@ -7,7 +7,13 @@ require('dotenv').config();
 
 const app = express();
 
-app.use(cors()); // ✅ Allow CORS from all origins for testing
+// 🔓 Enable CORS for Adobe Express origin
+app.use(cors({
+  origin: 'https://new.express.adobe.com',
+  credentials: true,
+}));
+
+// 🧠 Basic Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
@@ -19,6 +25,7 @@ app.use(session({
 // 🔍 Serve manifest.json FIRST — with error logging
 app.get('/manifest.json', (req, res) => {
   const filePath = path.join(__dirname, 'dist/manifest.json');
+  console.log('📦 Trying to serve:', filePath);
   res.sendFile(filePath, (err) => {
     if (err) {
       console.error('❌ Error sending manifest:', err);
@@ -32,6 +39,8 @@ app.use(express.static(path.join(__dirname, 'dist')));
 
 // 🔐 OAuth: Start login
 app.get('/auth/frameio', (req, res) => {
+  console.log('🔥 /auth/frameio hit');
+
   const state = Math.random().toString(36).substring(2);
   req.session.oauthState = state;
 
@@ -71,11 +80,9 @@ app.get('/auth/callback', async (req, res) => {
     const token = await tokenRes.json();
 
     if (token.access_token) {
+      req.session.frameioToken = token;
       res.send(`<script>
-        window.opener.postMessage(${JSON.stringify({
-          type: 'frameio-auth-success',
-          token: token.access_token
-        })}, '*');
+        window.opener.postMessage('frameio-auth-success', '*');
         window.close();
       </script>`);
     } else {
@@ -88,21 +95,21 @@ app.get('/auth/callback', async (req, res) => {
   }
 });
 
-// ✅ Support alternate callback path
+// ✅ SUPPORT alternate callback path from Frame.io
 app.get('/oauth/callback', (req, res) => {
   req.url = '/auth/callback';
   app._router.handle(req, res);
 });
 
-// 📦 API: List Frame.io assets using token passed in headers
+// 📦 API: List Frame.io assets
 app.get('/api/assets', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const token = req.session.frameioToken?.access_token;
+  const projectId = process.env.FRAMEIO_PROJECT_ID;
 
-  if (!token) return res.status(401).send("Missing access token");
+  if (!token) return res.status(401).send('Not authenticated');
 
   try {
-    const response = await fetch(`https://api.frame.io/v2/projects/${process.env.FRAMEIO_PROJECT_ID}/items`, {
+    const response = await fetch(`https://api.frame.io/v2/projects/${projectId}/items`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -110,7 +117,7 @@ app.get('/api/assets', async (req, res) => {
     res.json(assets);
   } catch (err) {
     console.error('❌ Error fetching assets:', err);
-    res.status(500).send("Failed to fetch assets");
+    res.status(500).send('Failed to fetch assets');
   }
 });
 
