@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const app = express();
 
-// 🕵️ Log incoming origin for debugging
+// 🌍 Log origin for debugging
 app.use((req, res, next) => {
   console.log('🌍 Origin:', req.headers.origin);
   next();
@@ -16,7 +16,7 @@ app.use((req, res, next) => {
 // 🔓 Enable dynamic CORS
 const allowedOrigins = [
   'https://new.express.adobe.com',
-  'https://your-addon-id.wxp.adobe-addons.com'  // TODO: replace with your actual one!
+  'https://your-addon-id.wxp.adobe-addons.com' // replace with your real ID if deployed
 ];
 
 app.use(cors({
@@ -30,7 +30,7 @@ app.use(cors({
   credentials: true,
 }));
 
-// 🧠 Basic Middleware
+// 🧠 Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
@@ -38,15 +38,14 @@ app.use(session({
   resave: false,
   saveUninitialized: true,
   cookie: {
-    sameSite: 'none',   // Allow cross-site cookies in iframes
-    secure: true        // Required for SameSite=None to work
+    sameSite: 'none',
+    secure: true
   }
 }));
 
-// 🔍 Serve manifest.json FIRST — with error logging
+// 📦 Serve manifest.json first
 app.get('/manifest.json', (req, res) => {
   const filePath = path.join(__dirname, 'dist/manifest.json');
-  console.log('📦 Trying to serve:', filePath);
   res.sendFile(filePath, (err) => {
     if (err) {
       console.error('❌ Error sending manifest:', err);
@@ -55,46 +54,54 @@ app.get('/manifest.json', (req, res) => {
   });
 });
 
-// 🌐 Serve other static frontend files (index.html, etc)
+// 🌐 Serve static files
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// 🔐 OAuth: Start login
+// 🔐 Start PKCE login
 app.get('/auth/frameio', (req, res) => {
-  console.log('🔥 /auth/frameio hit');
   const state = Math.random().toString(36).substring(2);
+  const codeChallenge = req.query.code_challenge;
+
+  if (!codeChallenge) return res.status(400).send('Missing code_challenge');
+
   req.session.oauthState = state;
+  req.session.codeChallenge = codeChallenge;
 
   const authUrl = `https://applications.frame.io/oauth2/auth` +
-    `?response_type=code&client_id=${process.env.FRAMEIO_CLIENT_ID}` +
+    `?response_type=code` +
+    `&client_id=${process.env.FRAMEIO_CLIENT_ID}` +
     `&redirect_uri=${encodeURIComponent(process.env.FRAMEIO_REDIRECT_URI)}` +
     `&scope=${encodeURIComponent('asset.read asset.create asset.delete reviewlink.create offline')}` +
-    `&state=${state}`;
+    `&state=${state}` +
+    `&code_challenge=${codeChallenge}` +
+    `&code_challenge_method=S256`;
 
   res.redirect(authUrl);
 });
 
-// 🔐 OAuth: Callback
+// 🔐 OAuth callback
 app.get('/auth/callback', async (req, res) => {
   const { code, state } = req.query;
-  if (state !== req.session.oauthState) return res.status(400).send('CSRF detected.');
+  const codeVerifier = req.session.codeVerifier;
+
+  if (state !== req.session.oauthState) {
+    return res.status(400).send('CSRF detected.');
+  }
 
   try {
-    const basicAuth = Buffer
-      .from(`${process.env.FRAMEIO_CLIENT_ID}:${process.env.FRAMEIO_CLIENT_SECRET}`)
-      .toString('base64');
-
     const params = new URLSearchParams();
     params.append('grant_type', 'authorization_code');
     params.append('code', code);
     params.append('redirect_uri', process.env.FRAMEIO_REDIRECT_URI);
+    params.append('client_id', process.env.FRAMEIO_CLIENT_ID);
+    params.append('code_verifier', req.session.codeVerifier);
 
     const tokenRes = await fetch('https://applications.frame.io/oauth2/token', {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${basicAuth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: params.toString(),
+      body: params.toString()
     });
 
     const token = await tokenRes.json();
@@ -102,7 +109,7 @@ app.get('/auth/callback', async (req, res) => {
     if (token.access_token) {
       req.session.frameioToken = token;
       res.send(`<script>
-        window.opener.postMessage('frameio-auth-success', '*');
+        window.opener?.postMessage('frameio-auth-success', '*');
         window.close();
       </script>`);
     } else {
@@ -115,13 +122,13 @@ app.get('/auth/callback', async (req, res) => {
   }
 });
 
-// ✅ SUPPORT alternate callback path from Frame.io
+// ✅ Fallback route for /oauth/callback
 app.get('/oauth/callback', (req, res) => {
   req.url = '/auth/callback';
   app._router.handle(req, res);
 });
 
-// 📦 API: List Frame.io assets
+// 📦 List Frame.io assets
 app.get('/api/assets', async (req, res) => {
   const token = req.session.frameioToken?.access_token;
   const projectId = process.env.FRAMEIO_PROJECT_ID;
