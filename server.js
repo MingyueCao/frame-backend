@@ -86,7 +86,10 @@ app.get('/oauth/callback', (req, res) => {
 });
 // 📦 API: List Frame.io assets
 app.get('/api/assets', async (req, res) => {
+  console.log('📦 Session token:', req.session.frameioToken);
+
   const token = req.session.frameioToken?.access_token;
+
   const projectId = process.env.FRAMEIO_PROJECT_ID;
   if (!token) return res.status(401).send('Not authenticated');
   try {
