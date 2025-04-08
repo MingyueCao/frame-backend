@@ -63,6 +63,7 @@ app.get('/auth/frameio', (req, res) => {
   console.log('🔥 /auth/frameio hit');
   const state = Math.random().toString(36).substring(2);
   req.session.oauthState = state;
+  console.log('🔐 Generated state:', state);
 
   const authUrl = `https://applications.frame.io/oauth2/auth` +
     `?response_type=code&client_id=${process.env.FRAMEIO_CLIENT_ID}` +
@@ -76,6 +77,8 @@ app.get('/auth/frameio', (req, res) => {
 // 🔐 OAuth: Callback
 app.get('/auth/callback', async (req, res) => {
   const { code, state } = req.query;
+  console.log('🔁 Returned state:', state);
+  console.log('📦 Session state:', req.session.oauthState);
   if (state !== req.session.oauthState) return res.status(400).send('CSRF detected.');
 
   try {
