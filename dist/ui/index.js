@@ -4,12 +4,8 @@ addOnUISdk.ready.then(() => {
   console.log("✅ Adobe Add-On SDK is ready");
 
   const loginBtn = document.getElementById("frameioLoginBtn");
-  const authStatus = document.getElementById("authStatus");
-  const container = document.getElementById("assetsContainer");
-
   loginBtn.disabled = false;
 
-  // 🔐 Open OAuth popup
   loginBtn.addEventListener("click", () => {
     const width = 600, height = 600;
     const left = window.screenX + (window.outerWidth - width) / 2;
@@ -22,26 +18,30 @@ addOnUISdk.ready.then(() => {
     );
   });
 
-  // ✅ Handle success message from OAuth popup
   window.addEventListener("message", async (event) => {
     if (event.data === "frameio-auth-success") {
       loginBtn.textContent = "✅ Logged into Frame.io";
       loginBtn.disabled = true;
+
+      const authStatus = document.getElementById("authStatus");
       if (authStatus) authStatus.textContent = "✅ Logged into Frame.io";
 
       try {
         const res = await fetch("https://frame-backend-0m58.onrender.com/api/assets", {
-          credentials: "include", // 👈 must send session cookies
+          credentials: "include", // Needed to send the session cookie!
         });
 
-        if (!res.ok) throw new Error(`Server responded with ${res.status}`);
+        if (!res.ok) {
+          throw new Error(`Server responded with ${res.status}`);
+        }
 
         const assets = await res.json();
         console.log("📦 Frame.io assets:", assets);
 
+        const container = document.getElementById("assetsContainer");
         container.innerHTML = "";
 
-        if (!assets.length) {
+        if (assets.length === 0) {
           container.textContent = "No assets found in your project.";
           return;
         }
@@ -53,7 +53,8 @@ addOnUISdk.ready.then(() => {
         });
       } catch (err) {
         console.error("❌ Failed to load assets:", err);
-        container.textContent = "❌ Failed to load assets.";
+        const container = document.getElementById("assetsContainer");
+        container.textContent = "❌ Failed to load assets";
       }
     }
   });
