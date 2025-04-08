@@ -1,15 +1,13 @@
 import addOnUISdk from "https://new.express.adobe.com/static/add-on-sdk/sdk.js";
 
 addOnUISdk.ready.then(() => {
-  console.log("✅ SDK ready");
+  console.log("✅ Adobe Add-On SDK is ready");
 
-  const button = document.getElementById("frameioLoginBtn");
-  const authStatus = document.getElementById("authStatus");
-  const assetsContainer = document.getElementById("assetsContainer");
+  const loginBtn = document.getElementById("frameioLoginBtn");
 
-  button.disabled = false;
+  loginBtn.disabled = false;
 
-  button.addEventListener("click", () => {
+  loginBtn.addEventListener("click", () => {
     const width = 600, height = 600;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
@@ -22,38 +20,42 @@ addOnUISdk.ready.then(() => {
   });
 
   window.addEventListener("message", async (event) => {
-    if (event.data?.type === "frameio-auth-success") {
-      const token = event.data.token;
-      console.log("✅ Logged in with token:", token);
+    if (event.data === "frameio-auth-success") {
+      loginBtn.textContent = "✅ Logged into Frame.io";
+      loginBtn.disabled = true;
 
-      button.textContent = "✅ Connected to Frame.io";
-      button.disabled = true;
+      const authStatus = document.getElementById("authStatus");
       if (authStatus) authStatus.textContent = "✅ Logged into Frame.io";
 
       try {
         const res = await fetch("https://frame-backend-0m58.onrender.com/api/assets", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: "include", // important for session-based auth!
         });
+
+        if (!res.ok) {
+          throw new Error(`Server responded with ${res.status}`);
+        }
 
         const assets = await res.json();
         console.log("📦 Frame.io assets:", assets);
 
-        assetsContainer.innerHTML = "";
+        const container = document.getElementById("assetsContainer");
+        container.innerHTML = "";
 
         if (assets.length === 0) {
-          assetsContainer.textContent = "No assets found.";
-        } else {
-          assets.forEach((item) => {
-            const div = document.createElement("div");
-            div.textContent = `📁 ${item.name}`;
-            assetsContainer.appendChild(div);
-          });
+          container.textContent = "No assets found in your project.";
+          return;
         }
+
+        assets.forEach((item) => {
+          const div = document.createElement("div");
+          div.textContent = `📁 ${item.name || "(Unnamed asset)"}`;
+          container.appendChild(div);
+        });
       } catch (err) {
         console.error("❌ Failed to load assets:", err);
-        assetsContainer.textContent = "❌ Error fetching assets.";
+        const container = document.getElementById("assetsContainer");
+        container.textContent = "❌ Failed to load assets";
       }
     }
   });
