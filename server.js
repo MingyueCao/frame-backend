@@ -1,3 +1,4 @@
+const cors = require('cors');
 const express = require('express');
 const path = require('path');
 const session = require('express-session');
@@ -5,6 +6,12 @@ const { fetch } = require('undici');
 require('dotenv').config();
 
 const app = express();
+
+// 🔓 Enable CORS for Adobe Express origin
+app.use(cors({
+  origin: 'https://new.express.adobe.com',
+  credentials: true,
+}));
 
 // 🧠 Basic Middleware
 app.use(express.json());
@@ -87,9 +94,6 @@ app.get('/auth/callback', async (req, res) => {
     res.status(500).send('OAuth server error.');
   }
 });
-
-
-
 
 // ✅ SUPPORT alternate callback path from Frame.io
 app.get('/oauth/callback', (req, res) => {
