@@ -37,6 +37,10 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'dev-secret',
   resave: false,
   saveUninitialized: true,
+  cookie: {
+    sameSite: 'none',   // Allow cross-site cookies in iframes
+    secure: true        // Required for SameSite=None to work
+  }
 }));
 
 // 🔍 Serve manifest.json FIRST — with error logging
