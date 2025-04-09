@@ -1,6 +1,6 @@
 {
-    "testId": "93a0090b-d60c-4b57-b20a-42e3672aed38",
-    "name": "Frame",
+    "testId": "playground-add-on",
+    "name": "Frame addon",
     "version": "1.0.0",
     "manifestVersion": 2,
     "requirements": {
@@ -9,14 +9,28 @@
                 "name": "Express",
                 "apiVersion": 1
             }
-        ]
+        ],
+        "experimentalApis": true,
+        "renditionPreview": true
     },
     "entryPoints": [
         {
             "type": "panel",
-            "id": "panel1",
+            "id": "playground-panel",
             "main": "index.html",
-            "documentSandbox": "sandbox/code.js"
+            "permissions": {
+                "sandbox": [
+                    "allow-popups",
+                    "allow-popups-to-escape-sandbox",
+                    "allow-presentation",
+                    "allow-downloads"
+                ],
+                "oauth": [
+                    "https://applications.frame.io",
+                    "https://www.frame.io"
+                ]
+            },
+            "documentSandbox": "code.js"
         }
     ]
 }
